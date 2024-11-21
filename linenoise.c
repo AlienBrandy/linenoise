@@ -286,9 +286,9 @@ static int getCursorPosition(int ifd, int ofd) {
 /* Try to get the number of columns in the current terminal, or assume 80
  * if it fails. */
 static int getColumns(int ifd, int ofd) {
-    struct winsize ws;
+//    struct winsize ws;
 
-    if (ioctl(1, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+//    if (ioctl(1, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
         /* ioctl() failed. Try to query the terminal itself. */
         int start, cols;
 
@@ -310,9 +310,9 @@ static int getColumns(int ifd, int ofd) {
             }
         }
         return cols;
-    } else {
-        return ws.ws_col;
-    }
+  //  } else {
+  //      return ws.ws_col;
+  //  }
 
 failed:
     return 80;
@@ -539,7 +539,7 @@ void refreshShowHints(struct abuf *ab, struct linenoiseState *l, int plen) {
  * prompt, just write it, or both. */
 static void refreshSingleLine(struct linenoiseState *l, int flags) {
     char seq[64];
-    size_t plen = strlen(l->prompt);
+    size_t plen = l->plen;
     int fd = l->ofd;
     char *buf = l->buf;
     size_t len = l->len;
@@ -595,7 +595,7 @@ static void refreshSingleLine(struct linenoiseState *l, int flags) {
  * prompt, just write it, or both. */
 static void refreshMultiLine(struct linenoiseState *l, int flags) {
     char seq[64];
-    int plen = strlen(l->prompt);
+    int plen = l->plen;
     int rows = (plen+l->len+l->cols-1)/l->cols; /* rows used by current buf. */
     int rpos = (plen+l->oldpos+l->cols)/l->cols; /* cursor relative row. */
     int rpos2; /* rpos after refresh. */
@@ -868,7 +868,7 @@ void linenoiseEditDeletePrevWord(struct linenoiseState *l) {
  * fails. If stdin_fd or stdout_fd are set to -1, the default is to use
  * STDIN_FILENO and STDOUT_FILENO.
  */
-int linenoiseEditStart(struct linenoiseState *l, int stdin_fd, int stdout_fd, char *buf, size_t buflen, const char *prompt) {
+int linenoiseEditStart(struct linenoiseState *l, int stdin_fd, int stdout_fd, char *buf, size_t buflen, const char *prompt, size_t prompt_width) {
     /* Populate the linenoise state that we pass to functions implementing
      * specific editing functionalities. */
     l->in_completion = 0;
@@ -877,7 +877,7 @@ int linenoiseEditStart(struct linenoiseState *l, int stdin_fd, int stdout_fd, ch
     l->buf = buf;
     l->buflen = buflen;
     l->prompt = prompt;
-    l->plen = strlen(prompt);
+    l->plen = prompt_width;
     l->oldpos = l->pos = 0;
     l->len = 0;
 
@@ -901,7 +901,7 @@ int linenoiseEditStart(struct linenoiseState *l, int stdin_fd, int stdout_fd, ch
      * initially is just an empty string. */
     linenoiseHistoryAdd("");
 
-    if (write(l->ofd,prompt,l->plen) == -1) return -1;
+    if (write(l->ofd,prompt,strlen(prompt)) == -1) return -1;
     return 0;
 }
 
@@ -1100,7 +1100,7 @@ void linenoiseEditStop(struct linenoiseState *l) {
  * In many applications that are not event-drivern, we can just call
  * the blocking linenoise API, wait for the user to complete the editing
  * and return the buffer. */
-static char *linenoiseBlockingEdit(int stdin_fd, int stdout_fd, char *buf, size_t buflen, const char *prompt)
+static char *linenoiseBlockingEdit(int stdin_fd, int stdout_fd, char *buf, size_t buflen, const char *prompt, size_t prompt_width)
 {
     struct linenoiseState l;
 
@@ -1110,7 +1110,7 @@ static char *linenoiseBlockingEdit(int stdin_fd, int stdout_fd, char *buf, size_
         return NULL;
     }
 
-    linenoiseEditStart(&l,stdin_fd,stdout_fd,buf,buflen,prompt);
+    linenoiseEditStart(&l,stdin_fd,stdout_fd,buf,buflen,prompt,prompt_width);
     char *res;
     while((res = linenoiseEditFeed(&l)) == linenoiseEditMore);
     linenoiseEditStop(&l);
@@ -1186,8 +1186,8 @@ static char *linenoiseNoTTY(void) {
  * for a blacklist of stupid terminals, and later either calls the line
  * editing function or uses dummy fgets() so that you will be able to type
  * something even in the most desperate of the conditions. */
-char *linenoise(const char *prompt) {
-    char buf[LINENOISE_MAX_LINE];
+char *linenoise(const char *prompt, size_t prompt_width) {
+    static char buf[LINENOISE_MAX_LINE];
 
     if (!isatty(STDIN_FILENO)) {
         /* Not a tty: read from file / pipe. In this mode we don't want any
@@ -1206,7 +1206,7 @@ char *linenoise(const char *prompt) {
         }
         return strdup(buf);
     } else {
-        char *retval = linenoiseBlockingEdit(STDIN_FILENO,STDOUT_FILENO,buf,LINENOISE_MAX_LINE,prompt);
+        char *retval = linenoiseBlockingEdit(STDIN_FILENO,STDOUT_FILENO,buf,LINENOISE_MAX_LINE,prompt,prompt_width);
         return retval;
     }
 }
@@ -1311,14 +1311,14 @@ int linenoiseHistorySetMaxLen(int len) {
 /* Save the history in the specified file. On success 0 is returned
  * otherwise -1 is returned. */
 int linenoiseHistorySave(const char *filename) {
-    mode_t old_umask = umask(S_IXUSR|S_IRWXG|S_IRWXO);
+//    mode_t old_umask = umask(S_IXUSR|S_IRWXG|S_IRWXO);
     FILE *fp;
     int j;
 
     fp = fopen(filename,"w");
-    umask(old_umask);
+//    umask(old_umask);
     if (fp == NULL) return -1;
-    chmod(filename,S_IRUSR|S_IWUSR);
+//    chmod(filename,S_IRUSR|S_IWUSR);
     for (j = 0; j < history_len; j++)
         fprintf(fp,"%s\n",history[j]);
     fclose(fp);
@@ -1332,7 +1332,7 @@ int linenoiseHistorySave(const char *filename) {
  * on error -1 is returned. */
 int linenoiseHistoryLoad(const char *filename) {
     FILE *fp = fopen(filename,"r");
-    char buf[LINENOISE_MAX_LINE];
+    static char buf[LINENOISE_MAX_LINE];
 
     if (fp == NULL) return -1;
 
